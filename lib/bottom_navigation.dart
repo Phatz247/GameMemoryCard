@@ -55,21 +55,9 @@ class GameBottomNavigation extends StatelessWidget {
               ),
               _buildNavItem(
                 index: 2,
-                icon: Icons.shopping_bag_rounded,
-                label: 'Cửa hàng',
-                isSelected: currentIndex == 2,
-              ),
-              _buildNavItem(
-                index: 3,
                 icon: Icons.person_rounded,
                 label: 'Hồ sơ',
-                isSelected: currentIndex == 3,
-              ),
-              _buildNavItem(
-                index: 4,
-                icon: Icons.inventory_2_rounded,
-                label: 'Túi đồ',
-                isSelected: currentIndex == 4,
+                isSelected: currentIndex == 2,
               ),
             ],
           ),
@@ -83,7 +71,6 @@ class GameBottomNavigation extends StatelessWidget {
     required IconData icon,
     required String label,
     required bool isSelected,
-    bool hasNotification = false,
   }) {
     return GestureDetector(
       onTap: () => onTap(index),
@@ -216,10 +203,7 @@ class _EventBannerCardState extends State<EventBannerCard> {
           ],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: banner.color.withOpacity(0.3),
-          width: 1,
-        ),
+        border: Border.all(color: banner.color.withOpacity(0.3), width: 1),
         boxShadow: [
           BoxShadow(
             color: banner.color.withOpacity(0.1),
@@ -238,11 +222,7 @@ class _EventBannerCardState extends State<EventBannerCard> {
                 color: banner.color.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(
-                banner.icon,
-                color: banner.color,
-                size: 24,
-              ),
+              child: Icon(banner.icon, color: banner.color, size: 24),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -276,13 +256,14 @@ class _EventBannerCardState extends State<EventBannerCard> {
             GestureDetector(
               onTap: () => _handleBannerTap(banner),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: banner.color.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: banner.color.withOpacity(0.3),
-                  ),
+                  border: Border.all(color: banner.color.withOpacity(0.3)),
                 ),
                 child: Text(
                   banner.actionText,
@@ -301,7 +282,7 @@ class _EventBannerCardState extends State<EventBannerCard> {
   }
 
   void _handleBannerTap(EventBanner banner) {
-    // Handle banner tap - navigate to specific screens based on banner type
+    
     print('Banner tapped: ${banner.title}');
     // You can add navigation logic here
   }

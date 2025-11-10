@@ -1,13 +1,11 @@
-// lib/card_model.dart
-
 import 'package:flutter/material.dart';
 
 enum CardType {
   normal,
-  bomb,    // Loses points/HP when flipped
-  ice,     // Freezes for one turn
-  bonus,   // Extra points when matched
-  shield   // Protects from next trap
+  bomb,
+  ice,
+  bonus,
+  shield
 }
 
 class CardItem {

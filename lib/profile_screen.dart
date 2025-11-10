@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'audio_service.dart';
 import 'auth_screen.dart';
+import 'auth_service.dart';
 import 'bottom_navigation.dart';
 import 'game_theme.dart';
 import 'game_modes.dart';
@@ -72,6 +74,9 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool soundEnabled = true;
   bool notificationsEnabled = true;
   String currentLanguage = 'Tiếng Việt';
+  bool isGuest = false; // Thêm biến để kiểm tra khách
+
+  final AuthService _authService = AuthService(); // Thêm auth service
 
   Map<String, dynamic> stats = {
     'totalGames': 0,
@@ -100,15 +105,31 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
-    final currentUser = prefs.getString('current_user') ?? 'Chưa xác định';
+
+    // ⭐ Kiểm tra trạng thái đăng nhập thực sự
+    final savedUser = await _authService.getSavedUser();
+    String displayName = 'Khách';
+    bool guestMode = true;
+
+    if (savedUser != null) {
+      displayName = savedUser['displayName'] ?? 'Player';
+      guestMode = savedUser['isGuest'] == true;
+
+      // Kiểm tra Firebase Auth để đảm bảo người dùng vẫn đăng nhập
+      if (!guestMode && _authService.currentUser == null) {
+        // User đã đăng xuất khỏi Firebase nhưng vẫn còn data local
+        guestMode = true;
+        displayName = 'Khách';
+      }
+    }
 
     setState(() {
-      username = currentUser;
+      username = displayName;
+      isGuest = guestMode;
       soundEnabled = prefs.getBool('sound_enabled') ?? true;
       notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
       currentLanguage = prefs.getString('language_$username') ?? 'Tiếng Việt';
 
-      // Load register date
       final registerDateStr = prefs.getString('register_date_$username');
       final registerDate = registerDateStr != null
           ? DateTime.parse(registerDateStr)
@@ -118,8 +139,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         'totalGames': prefs.getInt('total_games_$username') ?? 0,
         'wins': prefs.getInt('wins_$username') ?? 0,
         'highScore': prefs.getInt('high_score_$username') ?? 0,
-        'favoriteMode':
-        prefs.getString('favorite_mode_$username') ?? 'Cổ điển',
+        'favoriteMode': prefs.getString('favorite_mode_$username') ?? 'Cổ điển',
         'registerDate': registerDate,
         'playTime': prefs.getInt('play_time_$username') ?? 0,
       };
@@ -133,7 +153,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     final achievementsJson = prefs.getString('achievements_$username');
 
     if (achievementsJson == null) {
-      // Initialize default achievements
       final defaultAchievements = [
         Achievement(
           id: 'first_win',
@@ -190,20 +209,421 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (achievementsJson != null) {
       final List<dynamic> decoded = jsonDecode(achievementsJson);
       setState(() {
-        achievements =
-            decoded.map((json) => Achievement.fromJson(json)).toList();
+        achievements = decoded
+            .map((json) => Achievement.fromJson(json))
+            .toList();
       });
     }
   }
 
   Future<void> _saveAchievements(List<Achievement> achievementsList) async {
     final prefs = await SharedPreferences.getInstance();
-    final encoded =
-    jsonEncode(achievementsList.map((a) => a.toJson()).toList());
+    final encoded = jsonEncode(
+      achievementsList.map((a) => a.toJson()).toList(),
+    );
     await prefs.setString('achievements_$username', encoded);
     setState(() {
       achievements = achievementsList;
     });
+  }
+
+  /// Unlock achievements based on game stats
+  Future<void> unlockAchievements({
+    required bool isWin,
+    required int finalScore,
+    required int totalGames,
+    required int totalWins,
+    required int gameTime, // in seconds
+    required bool isPerfectMatch, // no wrong flips
+  }) async {
+    if (!isWin) return; // Only unlock on win
+
+    final updatedAchievements = List<Achievement>.from(achievements);
+
+    // 1. First win achievement
+    if (totalWins == 1 &&
+        !updatedAchievements
+            .firstWhere(
+              (a) => a.id == 'first_win',
+              orElse: () => Achievement(
+                id: '',
+                title: '',
+                description: '',
+                icon: Icons.emoji_events,
+                isUnlocked: false,
+              ),
+            )
+            .isUnlocked) {
+      final index = updatedAchievements.indexWhere((a) => a.id == 'first_win');
+      if (index != -1) {
+        updatedAchievements[index] = Achievement(
+          id: 'first_win',
+          title: updatedAchievements[index].title,
+          description: updatedAchievements[index].description,
+          icon: updatedAchievements[index].icon,
+          isUnlocked: true,
+        );
+      }
+    }
+
+    // 2. Play 10 games achievement
+    if (totalGames >= 10 &&
+        !updatedAchievements
+            .firstWhere(
+              (a) => a.id == 'play_10',
+              orElse: () => Achievement(
+                id: '',
+                title: '',
+                description: '',
+                icon: Icons.casino,
+                isUnlocked: false,
+              ),
+            )
+            .isUnlocked) {
+      final index = updatedAchievements.indexWhere((a) => a.id == 'play_10');
+      if (index != -1) {
+        updatedAchievements[index] = Achievement(
+          id: 'play_10',
+          title: updatedAchievements[index].title,
+          description: updatedAchievements[index].description,
+          icon: updatedAchievements[index].icon,
+          isUnlocked: true,
+        );
+      }
+    }
+
+    // 3. High scorer achievement (1000+ points)
+    if (finalScore >= 1000 &&
+        !updatedAchievements
+            .firstWhere(
+              (a) => a.id == 'high_scorer',
+              orElse: () => Achievement(
+                id: '',
+                title: '',
+                description: '',
+                icon: Icons.stars,
+                isUnlocked: false,
+              ),
+            )
+            .isUnlocked) {
+      final index = updatedAchievements.indexWhere(
+        (a) => a.id == 'high_scorer',
+      );
+      if (index != -1) {
+        updatedAchievements[index] = Achievement(
+          id: 'high_scorer',
+          title: updatedAchievements[index].title,
+          description: updatedAchievements[index].description,
+          icon: updatedAchievements[index].icon,
+          isUnlocked: true,
+        );
+      }
+    }
+
+    // 4. Speed demon achievement (complete in under 3 minutes = 180 seconds)
+    if (gameTime <= 180 &&
+        !updatedAchievements
+            .firstWhere(
+              (a) => a.id == 'speed_demon',
+              orElse: () => Achievement(
+                id: '',
+                title: '',
+                description: '',
+                icon: Icons.speed,
+                isUnlocked: false,
+              ),
+            )
+            .isUnlocked) {
+      final index = updatedAchievements.indexWhere(
+        (a) => a.id == 'speed_demon',
+      );
+      if (index != -1) {
+        updatedAchievements[index] = Achievement(
+          id: 'speed_demon',
+          title: updatedAchievements[index].title,
+          description: updatedAchievements[index].description,
+          icon: updatedAchievements[index].icon,
+          isUnlocked: true,
+        );
+      }
+    }
+
+    // 5. Perfectionist achievement (win without wrong flips)
+    if (isPerfectMatch &&
+        !updatedAchievements
+            .firstWhere(
+              (a) => a.id == 'perfectionist',
+              orElse: () => Achievement(
+                id: '',
+                title: '',
+                description: '',
+                icon: Icons.workspace_premium,
+                isUnlocked: false,
+              ),
+            )
+            .isUnlocked) {
+      final index = updatedAchievements.indexWhere(
+        (a) => a.id == 'perfectionist',
+      );
+      if (index != -1) {
+        updatedAchievements[index] = Achievement(
+          id: 'perfectionist',
+          title: updatedAchievements[index].title,
+          description: updatedAchievements[index].description,
+          icon: updatedAchievements[index].icon,
+          isUnlocked: true,
+        );
+      }
+    }
+
+    // 6. Dedicated player - check if played 7 consecutive days (simplified: just track days played)
+    final prefs = await SharedPreferences.getInstance();
+    final lastPlayDate = prefs.getString('last_play_date_$username');
+    final today = DateTime.now().toString().split(' ')[0]; // YYYY-MM-DD format
+
+    if (lastPlayDate != today) {
+      // Different day, increment days played
+      int daysPlayed = prefs.getInt('consecutive_days_$username') ?? 0;
+
+      if (lastPlayDate != null) {
+        final last = DateTime.parse(lastPlayDate);
+        final now = DateTime.now();
+        final dayDifference = now.difference(last).inDays;
+
+        if (dayDifference == 1) {
+          // Consecutive day
+          daysPlayed++;
+        } else if (dayDifference > 1) {
+          // Streak broken, restart
+          daysPlayed = 1;
+        }
+      } else {
+        daysPlayed = 1;
+      }
+
+      await prefs.setString('last_play_date_$username', today);
+      await prefs.setInt('consecutive_days_$username', daysPlayed);
+
+      // Unlock if 7 consecutive days
+      if (daysPlayed >= 7 &&
+          !updatedAchievements
+              .firstWhere(
+                (a) => a.id == 'dedicated',
+                orElse: () => Achievement(
+                  id: '',
+                  title: '',
+                  description: '',
+                  icon: Icons.favorite,
+                  isUnlocked: false,
+                ),
+              )
+              .isUnlocked) {
+        final index = updatedAchievements.indexWhere(
+          (a) => a.id == 'dedicated',
+        );
+        if (index != -1) {
+          updatedAchievements[index] = Achievement(
+            id: 'dedicated',
+            title: updatedAchievements[index].title,
+            description: updatedAchievements[index].description,
+            icon: updatedAchievements[index].icon,
+            isUnlocked: true,
+          );
+        }
+      }
+    }
+
+    await _saveAchievements(updatedAchievements);
+  }
+
+  /// Static method to unlock achievements from GameScreen
+  static Future<void> unlockAchievementsStatic({
+    required String playerName,
+    required bool isWin,
+    required int finalScore,
+    required int totalGames,
+    required int totalWins,
+    required int gameTime,
+    required bool isPerfectMatch,
+  }) async {
+    if (!isWin) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final achievementsJson = prefs.getString('achievements_$playerName');
+
+    List<Achievement> achievements = [];
+    if (achievementsJson != null) {
+      final List<dynamic> decoded = jsonDecode(achievementsJson);
+      achievements = decoded.map((json) => Achievement.fromJson(json)).toList();
+    } else {
+      achievements = [
+        Achievement(
+          id: 'first_win',
+          title: 'Chiến thắng đầu tiên',
+          description: 'Giành chiến thắng trong trận đầu tiên',
+          icon: Icons.emoji_events,
+          isUnlocked: false,
+        ),
+        Achievement(
+          id: 'play_10',
+          title: 'Người chơi tận tâm',
+          description: 'Chơi 10 trận game',
+          icon: Icons.casino,
+          isUnlocked: false,
+        ),
+        Achievement(
+          id: 'high_scorer',
+          title: 'Tay chơi xuất sắc',
+          description: 'Đạt 1000 điểm trong một trận',
+          icon: Icons.stars,
+          isUnlocked: false,
+        ),
+        Achievement(
+          id: 'speed_demon',
+          title: 'Tốc độ ánh sáng',
+          description: 'Hoàn thành trận trong 3 phút',
+          icon: Icons.speed,
+          isUnlocked: false,
+        ),
+        Achievement(
+          id: 'perfectionist',
+          title: 'Người hoàn hảo',
+          description: 'Giành chiến thắng không mắc lỗi',
+          icon: Icons.workspace_premium,
+          isUnlocked: false,
+        ),
+        Achievement(
+          id: 'dedicated',
+          title: 'Người chơi trung thành',
+          description: 'Chơi game 7 ngày liên tiếp',
+          icon: Icons.favorite,
+          isUnlocked: false,
+        ),
+      ];
+    }
+
+    final updatedAchievements = List<Achievement>.from(achievements);
+
+    // 1. First win
+    if (totalWins == 1) {
+      final index = updatedAchievements.indexWhere((a) => a.id == 'first_win');
+      if (index != -1 && !updatedAchievements[index].isUnlocked) {
+        updatedAchievements[index] = Achievement(
+          id: 'first_win',
+          title: updatedAchievements[index].title,
+          description: updatedAchievements[index].description,
+          icon: updatedAchievements[index].icon,
+          isUnlocked: true,
+        );
+      }
+    }
+
+    // 2. Play 10 games
+    if (totalGames >= 10) {
+      final index = updatedAchievements.indexWhere((a) => a.id == 'play_10');
+      if (index != -1 && !updatedAchievements[index].isUnlocked) {
+        updatedAchievements[index] = Achievement(
+          id: 'play_10',
+          title: updatedAchievements[index].title,
+          description: updatedAchievements[index].description,
+          icon: updatedAchievements[index].icon,
+          isUnlocked: true,
+        );
+      }
+    }
+
+    // 3. High scorer (1000+ points)
+    if (finalScore >= 1000) {
+      final index = updatedAchievements.indexWhere(
+        (a) => a.id == 'high_scorer',
+      );
+      if (index != -1 && !updatedAchievements[index].isUnlocked) {
+        updatedAchievements[index] = Achievement(
+          id: 'high_scorer',
+          title: updatedAchievements[index].title,
+          description: updatedAchievements[index].description,
+          icon: updatedAchievements[index].icon,
+          isUnlocked: true,
+        );
+      }
+    }
+
+    // 4. Speed demon (complete in under 3 minutes)
+    if (gameTime <= 180) {
+      final index = updatedAchievements.indexWhere(
+        (a) => a.id == 'speed_demon',
+      );
+      if (index != -1 && !updatedAchievements[index].isUnlocked) {
+        updatedAchievements[index] = Achievement(
+          id: 'speed_demon',
+          title: updatedAchievements[index].title,
+          description: updatedAchievements[index].description,
+          icon: updatedAchievements[index].icon,
+          isUnlocked: true,
+        );
+      }
+    }
+
+    // 5. Perfectionist (no wrong flips)
+    if (isPerfectMatch) {
+      final index = updatedAchievements.indexWhere(
+        (a) => a.id == 'perfectionist',
+      );
+      if (index != -1 && !updatedAchievements[index].isUnlocked) {
+        updatedAchievements[index] = Achievement(
+          id: 'perfectionist',
+          title: updatedAchievements[index].title,
+          description: updatedAchievements[index].description,
+          icon: updatedAchievements[index].icon,
+          isUnlocked: true,
+        );
+      }
+    }
+
+    // 6. Dedicated player (7 consecutive days)
+    final lastPlayDate = prefs.getString('last_play_date_$playerName');
+    final today = DateTime.now().toString().split(' ')[0];
+
+    if (lastPlayDate != today) {
+      int daysPlayed = prefs.getInt('consecutive_days_$playerName') ?? 0;
+
+      if (lastPlayDate != null) {
+        final last = DateTime.parse(lastPlayDate);
+        final now = DateTime.now();
+        final dayDifference = now.difference(last).inDays;
+
+        if (dayDifference == 1) {
+          daysPlayed++;
+        } else if (dayDifference > 1) {
+          daysPlayed = 1;
+        }
+      } else {
+        daysPlayed = 1;
+      }
+
+      await prefs.setString('last_play_date_$playerName', today);
+      await prefs.setInt('consecutive_days_$playerName', daysPlayed);
+
+      if (daysPlayed >= 7) {
+        final index = updatedAchievements.indexWhere(
+          (a) => a.id == 'dedicated',
+        );
+        if (index != -1 && !updatedAchievements[index].isUnlocked) {
+          updatedAchievements[index] = Achievement(
+            id: 'dedicated',
+            title: updatedAchievements[index].title,
+            description: updatedAchievements[index].description,
+            icon: updatedAchievements[index].icon,
+            isUnlocked: true,
+          );
+        }
+      }
+    }
+
+    final encoded = jsonEncode(
+      updatedAchievements.map((a) => a.toJson()).toList(),
+    );
+    await prefs.setString('achievements_$playerName', encoded);
   }
 
   String _formatPlayTime(int minutes) {
@@ -224,9 +644,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: GameThemeData.darkGradient,
-        ),
+        decoration: const BoxDecoration(gradient: GameThemeData.darkGradient),
         child: SafeArea(
           child: Column(
             children: [
@@ -266,8 +684,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                       ],
                     ),
                     IconButton(
-                      icon: const Icon(Icons.settings_outlined,
-                          color: Colors.white),
+                      icon: const Icon(
+                        Icons.settings_outlined,
+                        color: Colors.white,
+                      ),
                       onPressed: () {
                         _tabController.animateTo(2);
                       },
@@ -313,28 +733,25 @@ class _ProfileScreenState extends State<ProfileScreen>
 
               // Bottom Navigation
               GameBottomNavigation(
-                currentIndex: 3,
+                currentIndex: 2,
                 onTap: (index) {
                   switch (index) {
                     case 0:
                       Navigator.pushReplacementNamed(context, '/menu');
                       break;
                     case 1:
-                      Navigator.pushReplacementNamed(context, '/leaderboard',
-                          arguments: {
-                            'gameMode': GameMode.classic,
-                            'level': 1,
-                            'currentPlayer': username,
-                          });
+                      Navigator.pushReplacementNamed(
+                        context,
+                        '/leaderboard',
+                        arguments: {
+                          'gameMode': GameMode.classic,
+                          'level': 1,
+                          'currentPlayer': username,
+                        },
+                      );
                       break;
                     case 2:
-                      Navigator.pushReplacementNamed(context, '/shop');
-                      break;
-                    case 3:
-                    // Already in profile
-                      break;
-                    case 4:
-                      Navigator.pushReplacementNamed(context, '/inventory');
+                      // Already in profile
                       break;
                   }
                 },
@@ -490,210 +907,471 @@ class _ProfileScreenState extends State<ProfileScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Preferences Section
           Text(
-            'Tùy chọn',
+            'Cài đặt tài khoản',
             style: GoogleFonts.poppins(
-              color: Colors.white70,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+              color: GameThemeData.primaryColor,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 12),
-          _buildSettingSwitch(
+          const SizedBox(height: 16),
+
+          // Đổi tên hiển thị
+          _buildSettingsButton(
+            'Đổi tên hiển thị',
+            Icons.person_outline,
+            onTap: _showChangeNameDialog,
+            isDisabled: isGuest,
+          ),
+
+          // Đổi mật khẩu - chỉ cho tài khoản đã đăng ký
+          _buildSettingsButton(
+            'Đổi mật khẩu',
+            Icons.lock_outline,
+            onTap: _showChangePasswordDialog,
+            isDisabled: isGuest,
+          ),
+
+          const SizedBox(height: 24),
+          Text(
+            'Cài đặt chung',
+            style: GoogleFonts.poppins(
+              color: GameThemeData.primaryColor,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Âm thanh
+          _buildSwitchSetting(
             'Âm thanh',
-            Icons.volume_up,
+            Icons.volume_up_outlined,
             soundEnabled,
-                (value) async {
-              setState(() => soundEnabled = value);
+            (value) async {
+              setState(() {
+                soundEnabled = value;
+              });
               final prefs = await SharedPreferences.getInstance();
               await prefs.setBool('sound_enabled', value);
+              final audioService = AudioService();
+              await audioService.setMusicEnabled(value);
+              await audioService.setSfxEnabled(value);
             },
           ),
-          _buildSettingSwitch(
+
+          const SizedBox(height: 16),
+
+          _buildSwitchSetting(
             'Thông báo',
-            Icons.notifications,
+            Icons.notifications_outlined,
             notificationsEnabled,
-                (value) async {
-              setState(() => notificationsEnabled = value);
+            (value) async {
+              setState(() {
+                notificationsEnabled = value;
+              });
               final prefs = await SharedPreferences.getInstance();
               await prefs.setBool('notifications_enabled', value);
             },
           ),
-          _buildSettingItem(
+
+          // Ngôn ngữ
+          _buildSettingsButton(
             'Ngôn ngữ',
             Icons.language,
             trailing: Text(
               currentLanguage,
-              style: const TextStyle(color: Colors.grey),
+              style: TextStyle(color: Colors.grey),
             ),
-            onTap: _showLanguageSelection,
+            onTap: _showLanguageDialog,
           ),
-          const SizedBox(height: 24),
 
-          // Account Section
-          Text(
-            'Tài khoản',
-            style: GoogleFonts.poppins(
-              color: Colors.white70,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildSettingItem(
-            'Đổi mật khẩu',
-            Icons.lock_outline,
-            onTap: _showChangePasswordDialog,
-          ),
-          _buildSettingItem(
-            'Xóa lịch sử chơi',
-            Icons.delete_outline,
-            color: Colors.red,
-            onTap: _resetStats,
-          ),
-          const SizedBox(height: 24),
-
-          // Support Section
-          Text(
-            'Hỗ trợ',
-            style: GoogleFonts.poppins(
-              color: Colors.white70,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildSettingItem(
-            'Liên hệ hỗ trợ',
-            Icons.headset_mic,
-            onTap: _showSupportDialog,
-          ),
-          const SizedBox(height: 24),
-
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _logout,
-              icon: const Icon(Icons.logout),
-              label: const Text('Đăng xuất'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
+          const SizedBox(height: 32),
+          // Đăng xuất
+          _buildSettingsButton(
+            isGuest ? 'Đăng nhập' : 'Đăng xuất',
+            isGuest ? Icons.login : Icons.logout,
+            onTap:
+                _logout, // Fixed: changed to _logout instead of _handleAuthAction
+            textColor: Colors.redAccent,
+            iconColor: Colors.redAccent,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.black26,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: GameThemeData.primaryColor.withAlpha(77),
-          width: 2,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 32,
-              color: GameThemeData.primaryColor,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 12,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 8),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                value,
-                style: const TextStyle(
+  // Hàm hiển thị dialog đổi mật khẩu
+  void _showChangePasswordDialog() {
+    if (isGuest || _authService.currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng đăng nhập để đổi mật khẩu')),
+      );
+      return;
+    }
+
+    final currentPasswordController = TextEditingController();
+    final newPasswordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    bool isLoading = false;
+    String? errorMessage;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: GameThemeData.darkBackgroundColor,
+              title: Text(
+                'Đổi mật khẩu',
+                style: GoogleFonts.poppins(
                   color: Colors.white,
-                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
-                textAlign: TextAlign.center,
               ),
-            ),
-          ],
-        ),
-      ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Mật khẩu hiện tại
+                    TextField(
+                      controller: currentPasswordController,
+                      obscureText: true,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Mật khẩu hiện tại',
+                        labelStyle: const TextStyle(color: Colors.grey),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.grey.shade800),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: GameThemeData.primaryColor,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Mật khẩu mới
+                    TextField(
+                      controller: newPasswordController,
+                      obscureText: true,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Mật khẩu mới',
+                        labelStyle: const TextStyle(color: Colors.grey),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.grey.shade800),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: GameThemeData.primaryColor,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Xác nhận mật khẩu mới
+                    TextField(
+                      controller: confirmPasswordController,
+                      obscureText: true,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Xác nhận mật khẩu mới',
+                        labelStyle: const TextStyle(color: Colors.grey),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: Colors.grey.shade800),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: GameThemeData.primaryColor,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+
+                    if (errorMessage != null) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.red.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: Colors.red,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                errorMessage!,
+                                style: const TextStyle(
+                                  color: Colors.red,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Hủy', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  onPressed: isLoading
+                      ? null
+                      : () async {
+                          // Validate input
+                          if (currentPasswordController.text.isEmpty ||
+                              newPasswordController.text.isEmpty ||
+                              confirmPasswordController.text.isEmpty) {
+                            setState(() {
+                              errorMessage = 'Vui lòng điền đầy đủ thông tin';
+                            });
+                            return;
+                          }
+
+                          if (newPasswordController.text !=
+                              confirmPasswordController.text) {
+                            setState(() {
+                              errorMessage = 'Xác nhận mật khẩu không khớp';
+                            });
+                            return;
+                          }
+
+                          if (newPasswordController.text.length < 6) {
+                            setState(() {
+                              errorMessage =
+                                  'Mật khẩu mới phải có ít nhất 6 ký tự';
+                            });
+                            return;
+                          }
+
+                          // Set loading state
+                          setState(() {
+                            isLoading = true;
+                            errorMessage = null;
+                          });
+
+                          // Call the change password method
+                          final result = await _authService.changePassword(
+                            currentPassword: currentPasswordController.text,
+                            newPassword: newPasswordController.text,
+                          );
+
+                          if (!result['success']) {
+                            setState(() {
+                              isLoading = false;
+                              errorMessage = result['message'];
+                            });
+                          } else {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Đổi mật khẩu thành công'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: GameThemeData.primaryColor,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: GameThemeData.primaryColor
+                        .withOpacity(0.6),
+                  ),
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text('Đổi mật khẩu'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
-  Widget _buildSettingItem(
-      String title,
-      IconData icon, {
-        Widget? trailing,
-        VoidCallback? onTap,
-        Color? color,
-      }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.black26,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ListTile(
-        onTap: onTap,
-        leading: Icon(icon, color: color ?? Colors.white),
-        title: Text(
-          title,
-          style: TextStyle(color: color ?? Colors.white),
-        ),
-        trailing: trailing ??
-            const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
-      ),
+  // Hiển thị dialog đổi tên hiển thị
+  void _showChangeNameDialog() {
+    // Implementation will go here
+    showDialog(
+      context: context,
+      builder: (context) {
+        final nameController = TextEditingController(text: username);
+        bool isLoading = false;
+        String? errorMessage;
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: GameThemeData.darkBackgroundColor,
+              title: Text(
+                'Đổi tên hiển thị',
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Tên hiển thị mới',
+                      labelStyle: const TextStyle(color: Colors.grey),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: Colors.grey.shade800),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: BorderSide(
+                          color: GameThemeData.primaryColor,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+
+                  if (errorMessage != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            color: Colors.red,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              errorMessage!,
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Hủy', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  onPressed: isLoading
+                      ? null
+                      : () async {
+                          final newName = nameController.text.trim();
+
+                          if (newName.isEmpty) {
+                            setState(() {
+                              errorMessage = 'Tên hiển thị không được để trống';
+                            });
+                            return;
+                          }
+
+                          setState(() {
+                            isLoading = true;
+                            errorMessage = null;
+                          });
+
+                          final result = await _authService.updateDisplayName(
+                            newName,
+                          );
+
+                          if (result) {
+                            if (mounted) {
+                              setState(() => username = newName);
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Đổi tên hiển thị thành công'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+
+                              // Refresh user data
+                              _loadUserData();
+                            }
+                          } else {
+                            setState(() {
+                              isLoading = false;
+                              errorMessage = 'Không thể cập nhật tên hiển thị';
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: GameThemeData.primaryColor,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: GameThemeData.primaryColor
+                        .withOpacity(0.6),
+                  ),
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text('Lưu'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
-  Widget _buildSettingSwitch(
-      String title,
-      IconData icon,
-      bool value,
-      Function(bool) onChanged,
-      ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.black26,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ListTile(
-        leading: Icon(icon, color: Colors.white),
-        title: Text(title, style: const TextStyle(color: Colors.white)),
-        trailing: Switch(
-          value: value,
-          onChanged: onChanged,
-          activeThumbColor: GameThemeData.primaryColor,
-          activeTrackColor: GameThemeData.primaryColor.withAlpha(77),
-        ),
-      ),
-    );
-  }
-
-  void _showLanguageSelection() {
+  // Hiển thị dialog chọn ngôn ngữ
+  void _showLanguageDialog() {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -724,8 +1402,8 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
             ),
             const SizedBox(height: 16),
-            _buildLanguageOption('Tiếng Việt', 'vi'),
-            _buildLanguageOption('English', 'en'),
+            _buildLanguageOption('Tiếng Việt'),
+            _buildLanguageOption('English'),
             const SizedBox(height: 16),
           ],
         ),
@@ -733,7 +1411,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _buildLanguageOption(String label, String code) {
+  Widget _buildLanguageOption(String label) {
     final isSelected = currentLanguage == label;
     return ListTile(
       leading: Icon(
@@ -757,133 +1435,10 @@ class _ProfileScreenState extends State<ProfileScreen>
           currentLanguage = label;
         });
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Đã chuyển sang $label')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Đã chuyển sang $label')));
       },
-    );
-  }
-
-  void _showChangePasswordDialog() {
-    final oldPasswordController = TextEditingController();
-    final newPasswordController = TextEditingController();
-    final confirmPasswordController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1a1a2e),
-        title: Text(
-          'Đổi mật khẩu',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: oldPasswordController,
-              obscureText: true,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'Mật khẩu cũ',
-                labelStyle: const TextStyle(color: Colors.grey),
-                enabledBorder: OutlineInputBorder(
-                  borderSide: const BorderSide(color: Colors.grey),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: GameThemeData.primaryColor),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: newPasswordController,
-              obscureText: true,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'Mật khẩu mới',
-                labelStyle: const TextStyle(color: Colors.grey),
-                enabledBorder: OutlineInputBorder(
-                  borderSide: const BorderSide(color: Colors.grey),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: GameThemeData.primaryColor),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: confirmPasswordController,
-              obscureText: true,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: 'Xác nhận mật khẩu',
-                labelStyle: const TextStyle(color: Colors.grey),
-                enabledBorder: OutlineInputBorder(
-                  borderSide: const BorderSide(color: Colors.grey),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: GameThemeData.primaryColor),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final prefs = await SharedPreferences.getInstance();
-              final storedPassword = prefs.getString('password_$username');
-
-              if (storedPassword != null &&
-                  oldPasswordController.text != storedPassword) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Mật khẩu cũ không đúng')),
-                );
-                return;
-              }
-
-              if (newPasswordController.text.length < 6) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Mật khẩu phải có ít nhất 6 ký tự')),
-                );
-                return;
-              }
-
-              if (newPasswordController.text !=
-                  confirmPasswordController.text) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Mật khẩu xác nhận không khớp')),
-                );
-                return;
-              }
-
-              await prefs.setString(
-                  'password_$username', newPasswordController.text);
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Đã đổi mật khẩu thành công')),
-              );
-            },
-            child: const Text('Xác nhận'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -925,10 +1480,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                   icon: const Icon(Icons.copy, color: Colors.grey),
                   onPressed: () {
                     Clipboard.setData(
-                        const ClipboardData(text: 'support@mygame.com'));
+                      const ClipboardData(text: 'support@mygame.com'),
+                    );
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                          content: Text('Đã sao chép email vào clipboard')),
+                        content: Text('Đã sao chép email vào clipboard'),
+                      ),
                     );
                   },
                 ),
@@ -956,66 +1513,19 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Future<void> _resetStats() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1a1a2e),
-        title: Text(
-          'Xóa lịch sử?',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        content: Text(
-          'Bạn có chắc muốn xóa toàn bộ lịch sử chơi game? Hành động này không thể hoàn tác.',
-          style: GoogleFonts.poppins(color: Colors.grey),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
-            child: const Text('Xóa'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('total_games_$username');
-      await prefs.remove('wins_$username');
-      await prefs.remove('high_score_$username');
-      await prefs.remove('favorite_mode_$username');
-      await prefs.remove('play_time_$username');
-
-      setState(() {
-        stats = {
-          'totalGames': 0,
-          'wins': 0,
-          'highScore': 0,
-          'favoriteMode': 'Cổ điển',
-          'registerDate': stats['registerDate'],
-          'playTime': 0,
-        };
-      });
-
+  Future<void> _logout() async {
+    // Nếu là khách, chuyển đến màn hình đăng nhập ngay lập tức
+    if (isGuest) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã xóa lịch sử chơi game')),
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AuthScreen()),
+          (route) => false,
         );
       }
+      return;
     }
-  }
 
-  Future<void> _logout() async {
+    // Nếu là người dùng đã đăng nhập, hiển thị xác nhận đăng xuất
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1045,19 +1555,116 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
 
     if (confirmed == true) {
-      final prefs = await SharedPreferences.getInstance();
-
-      // Clear session data but keep user data for future logins
-      await prefs.remove('current_user');
-      await prefs.remove('session_token');
-      await prefs.remove('last_login');
+      // Sử dụng AuthService để đăng xuất (xóa cả Firebase Auth và local data)
+      await _authService.signOut();
 
       if (mounted) {
+        // Chuyển đến màn hình đăng nhập
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const AuthScreen()),
-              (route) => false,
+          (route) => false,
         );
       }
     }
   }
+
+  Widget _buildStatCard(String title, String value, IconData icon) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black26,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withAlpha(26)),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 32, color: GameThemeData.primaryColor),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(color: Colors.grey, fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsButton(
+    String title,
+    IconData icon, {
+    VoidCallback? onTap,
+    Widget? trailing,
+    bool isDisabled = false,
+    Color textColor = Colors.white,
+    Color iconColor = Colors.white,
+  }) {
+    return ListTile(
+      onTap: isDisabled ? null : onTap,
+      leading: Icon(icon, color: isDisabled ? Colors.grey : iconColor),
+      title: Text(
+        title,
+        style: GoogleFonts.poppins(color: isDisabled ? Colors.grey : textColor),
+      ),
+      trailing:
+          trailing ??
+          Icon(
+            Icons.arrow_forward_ios,
+            size: 16,
+            color: isDisabled ? Colors.grey : Colors.white54,
+          ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      tileColor: Colors.black12,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+    );
+  }
+
+  Widget _buildSwitchSetting(
+    String title,
+    IconData icon,
+    bool value,
+    Function(bool) onChanged,
+  ) {
+    return SwitchListTile(
+      value: value,
+      onChanged: onChanged,
+      title: Text(title, style: GoogleFonts.poppins(color: Colors.white)),
+      activeColor: GameThemeData.primaryColor,
+      secondary: Icon(icon, color: Colors.white),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      tileColor: Colors.black12,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+    );
+  }
+}
+
+// Public wrapper function to unlock achievements from GameScreen
+Future<void> unlockGameAchievements({
+  required String playerName,
+  required bool isWin,
+  required int finalScore,
+  required int totalGames,
+  required int totalWins,
+  required int gameTime,
+  required bool isPerfectMatch,
+}) async {
+  await _ProfileScreenState.unlockAchievementsStatic(
+    playerName: playerName,
+    isWin: isWin,
+    finalScore: finalScore,
+    totalGames: totalGames,
+    totalWins: totalWins,
+    gameTime: gameTime,
+    isPerfectMatch: isPerfectMatch,
+  );
 }

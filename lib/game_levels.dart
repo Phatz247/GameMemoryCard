@@ -172,65 +172,12 @@ class LevelData {
     ),
   ];
 
-  static const challengeLevels = [
-    GameLevel(
-      name: "Thách Đấu 1",
-      description: "Cẩn thận với bẫy",
-      timeLimit: 90,
-      gridRows: 3,
-      gridCols: 4,
-      targetScore: 400,
-      isLocked: false,
-      availableIcons: [
-        Icons.star, Icons.favorite, Icons.cloud, Icons.wb_sunny,
-        Icons.anchor, Icons.cake,
-      ],
-      modeSpecific: {
-        'trapCount': 2,
-        'trapTypes': ['bomb', 'ice'],
-      },
-    ),
-    GameLevel(
-      name: "Thách Đấu 2",
-      description: "Nhiều bẫy hơn, khó hơn",
-      timeLimit: 120,
-      gridRows: 4,
-      gridCols: 4,
-      targetScore: 600,
-      availableIcons: [
-        Icons.star, Icons.favorite, Icons.cloud, Icons.wb_sunny,
-        Icons.anchor, Icons.bug_report, Icons.cake, Icons.lightbulb,
-      ],
-      modeSpecific: {
-        'trapCount': 3,
-        'trapTypes': ['bomb', 'ice', 'reverse'],
-      },
-    ),
-    GameLevel(
-      name: "Thách Đấu 3",
-      description: "Thử thách cuối cùng",
-      timeLimit: 150,
-      gridRows: 4,
-      gridCols: 5,
-      targetScore: 1000,
-      availableIcons: [
-        Icons.star, Icons.favorite, Icons.cloud, Icons.wb_sunny,
-        Icons.anchor, Icons.bug_report, Icons.cake, Icons.lightbulb,
-        Icons.music_note, Icons.pets,
-      ],
-      modeSpecific: {
-        'trapCount': 4,
-        'trapTypes': ['bomb', 'ice', 'reverse', 'shuffle'],
-      },
-    ),
-  ];
-
   static List<GameLevel> getLevelsForMode(GameMode mode) {
     return switch (mode) {
       GameMode.classic => classicLevels,
       GameMode.timeAttack => timeAttackLevels,
       GameMode.survival => survivalLevels,
-      GameMode.challenge => challengeLevels,
+      GameMode.online => classicLevels, // Online mode uses classic levels
     };
   }
 }

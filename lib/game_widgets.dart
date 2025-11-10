@@ -1,5 +1,3 @@
-// lib/game_widgets.dart - Updated version
-
 import 'package:flutter/material.dart';
 import 'game_modes.dart';
 import 'game_theme.dart';
@@ -47,11 +45,9 @@ class GameStatusBar extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Top row: Score, Level, Pause
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Score section
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -61,7 +57,7 @@ class GameStatusBar extends StatelessWidget {
                         const Icon(Icons.stars, color: Colors.white, size: 20),
                         const SizedBox(width: 4),
                         Text(
-                          'Score',
+                          'Điểm',
                           style: GameThemeData.statusTextStyle.copyWith(
                             fontSize: 12,
                             color: Colors.white70,
@@ -78,7 +74,7 @@ class GameStatusBar extends StatelessWidget {
                     ),
                     if (highScore > 0)
                       Text(
-                        'Best: $highScore',
+                        'Tốt nhất: $highScore',
                         style: GameThemeData.statusTextStyle.copyWith(
                           fontSize: 10,
                           color: Colors.white54,
@@ -88,7 +84,6 @@ class GameStatusBar extends StatelessWidget {
                 ),
               ),
 
-              // Level indicator
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
@@ -102,7 +97,7 @@ class GameStatusBar extends StatelessWidget {
                 child: Column(
                   children: [
                     Text(
-                      'LEVEL',
+                      'CẤP ĐỘ',
                       style: GameThemeData.statusTextStyle.copyWith(
                         fontSize: 10,
                         letterSpacing: 1.5,
@@ -142,10 +137,8 @@ class GameStatusBar extends StatelessWidget {
 
           const SizedBox(height: 12),
 
-          // Bottom row: Time/Lives and Progress
           Row(
             children: [
-              // Time or Lives display
               Expanded(
                 child: mode == GameMode.survival
                     ? _buildLivesDisplay()
@@ -154,7 +147,6 @@ class GameStatusBar extends StatelessWidget {
 
               const SizedBox(width: 12),
 
-              // Shield indicator
               if (hasShield)
                 Container(
                   padding: const EdgeInsets.all(8),
@@ -176,8 +168,6 @@ class GameStatusBar extends StatelessWidget {
           ),
 
           const SizedBox(height: 8),
-
-          // Progress bar
           _buildProgressBar(),
         ],
       ),
@@ -213,7 +203,7 @@ class GameStatusBar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            mode == GameMode.classic ? 'Time: $timeString' : timeString,
+            mode == GameMode.classic ? 'Thời gian: $timeString' : timeString,
             style: GameThemeData.statusTextStyle.copyWith(
               color: isLowTime ? Colors.red : Colors.white,
               fontWeight: FontWeight.bold,
@@ -247,7 +237,7 @@ class GameStatusBar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            'HP: $lives',
+            'Máu: $lives',
             style: GameThemeData.statusTextStyle.copyWith(
               color: lives <= 1 ? Colors.red : Colors.white,
               fontWeight: FontWeight.bold,
@@ -265,7 +255,7 @@ class GameStatusBar extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Progress',
+              'Tiến độ',
               style: GameThemeData.statusTextStyle.copyWith(
                 fontSize: 11,
                 color: Colors.white70,
@@ -419,7 +409,6 @@ class _GameCardState extends State<GameCard> with SingleTickerProviderStateMixin
                 ),
               ),
 
-              // Overlay for special cards
               if (widget.cardType != CardType.normal)
                 Positioned.fill(
                   child: Container(
@@ -436,7 +425,6 @@ class _GameCardState extends State<GameCard> with SingleTickerProviderStateMixin
                   ),
                 ),
 
-              // Icon badge for special cards
               if (widget.cardType != CardType.normal)
                 Positioned(
                   top: 4,
@@ -578,7 +566,7 @@ class GameResultDialog extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Score:', style: GameThemeData.statusTextStyle),
+                      Text('Điểm:', style: GameThemeData.statusTextStyle),
                       Text(
                         '$score',
                         style: GameThemeData.statusTextStyle.copyWith(
@@ -592,7 +580,7 @@ class GameResultDialog extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Time:', style: GameThemeData.statusTextStyle),
+                      Text('Thời gian:', style: GameThemeData.statusTextStyle),
                       Text(
                         '${time}s',
                         style: GameThemeData.statusTextStyle.copyWith(
@@ -611,7 +599,7 @@ class GameResultDialog extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: onPlayAgain,
                     style: GameThemeData.primaryButtonStyle,
-                    child: const Text('Play Again'),
+                    child: const Text('Chơi Lại'),
                   ),
                 ),
                 const SizedBox(width: 12),

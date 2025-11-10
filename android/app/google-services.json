@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "1008664164309",
+    "firebase_url": "https://gamememory-9ab53-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "gamememory-9ab53",
+    "storage_bucket": "gamememory-9ab53.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1008664164309:android:7f98641898225e23f9af5c",
+        "android_client_info": {
+          "package_name": "com.example.project2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBN4FPsGvAXTbV7-OG5RFBbWNf_7ia3I-Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -8,8 +8,8 @@ class GameThemeData {
   static const Color accentColor = Color(0xFF10b981); // Emerald
   static const Color errorColor = Color(0xFFef4444); // Red
   static const Color surfaceColor = Color(0xFF1a1a2e);
+  static const Color darkBackgroundColor = Color(0xFF1a1a2e); // Added for profile screen
 
-  // Gradient backgrounds
   static const LinearGradient darkGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
@@ -31,7 +31,6 @@ class GameThemeData {
     ],
   );
 
-  // Card styling
   static BoxDecoration gameCardDecoration = BoxDecoration(
     gradient: cardGradient,
     borderRadius: BorderRadius.circular(16),
@@ -58,7 +57,7 @@ class GameThemeData {
     ),
   );
 
-  // Text styles
+
   static TextStyle titleTextStyle = GoogleFonts.orbitron(
     fontSize: 28,
     fontWeight: FontWeight.bold,
@@ -89,7 +88,7 @@ class GameThemeData {
     color: Colors.white,
   );
 
-  // Button styles
+
   static ButtonStyle primaryButtonStyle = ElevatedButton.styleFrom(
     backgroundColor: primaryColor,
     foregroundColor: Colors.white,
@@ -112,7 +111,7 @@ class GameThemeData {
     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
   );
 
-  // Icon button style for floating buttons
+
   static BoxDecoration floatingIconDecoration = BoxDecoration(
     gradient: LinearGradient(
       colors: [

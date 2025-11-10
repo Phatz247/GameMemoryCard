@@ -1,8 +1,8 @@
 enum GameMode {
-  classic,    // Normal gameplay
-  timeAttack, // Limited time, score based on pairs found
-  survival,   // Losing HP on mistakes
-  challenge   // Special cards with traps
+  classic,
+  timeAttack,
+  survival,
+  online
 }
 
 enum Difficulty {
@@ -31,19 +31,19 @@ class GameConfig {
     this.theme = GameTheme.icons
   });
 
-  // Get grid dimensions based on difficulty
+  
   (int rows, int columns) get gridSize {
     switch (difficulty) {
       case Difficulty.easy:
-        return (2, 2);  // 4 cards (2 pairs)
+        return (2, 2);
       case Difficulty.medium:
-        return (2, 3);  // 6 cards (3 pairs) - changed from 3x3
+        return (2, 3);
       case Difficulty.hard:
-        return (4, 4);  // 16 cards (8 pairs)
+        return (4, 4);
     }
   }
 
-  // Get time limit based on mode and difficulty
+
   int getTimeLimit() {
     switch (mode) {
       case GameMode.classic:
@@ -53,19 +53,14 @@ class GameConfig {
           Difficulty.hard => 300,
         };
       case GameMode.timeAttack:
-        return 60;  // Fixed time for time attack
+        return 60;
       case GameMode.survival:
-        return -1;  // No time limit for survival
-      case GameMode.challenge:
-        return switch (difficulty) {
-          Difficulty.easy => 150,
-          Difficulty.medium => 210,
-          Difficulty.hard => 330,
-        };
+        return -1;
+      case GameMode.online:
+        return 90;
     }
   }
 
-  // Get initial HP for survival mode
   int getInitialHP() {
     return switch (difficulty) {
       Difficulty.easy => 5,

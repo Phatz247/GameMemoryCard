@@ -1,0 +1,2 @@
+{"firestore":{"rules":"firestore.rules","indexes":"firestore.indexes.json"},"flutter":{"platforms":{"android":{"default":{"projectId":"gamememory-9ab53","appId":"1:1008664164309:android:7f98641898225e23f9af5c","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"gamememory-9ab53","configurations":{"android":"1:1008664164309:android:7f98641898225e23f9af5c","web":"1:1008664164309:web:9fb9bf2a115ae8caf9af5c"}}}}}}
+

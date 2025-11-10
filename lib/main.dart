@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'auth_screen.dart';
 import 'menu_screen.dart';
 import 'game_screen.dart';
-import 'shop_screen.dart';
 import 'profile_screen.dart';
-import 'inventory_screen.dart';
 import 'leaderboard_screen.dart';
 import 'game_modes.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   runApp(const MyApp());
 }
 
@@ -18,7 +23,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Memory Card Game',
+      title: 'Trò Chơi Lật Thẻ',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.indigo,
@@ -62,9 +67,7 @@ class MyApp extends StatelessWidget {
       routes: {
         '/': (context) => const AuthScreen(),
         '/menu': (context) => const MenuScreen(),
-        '/shop': (context) => const ShopScreen(),
         '/profile': (context) => const ProfileScreen(),
-        '/inventory': (context) => const InventoryScreen(),
       },
       debugShowCheckedModeBanner: false,
     );

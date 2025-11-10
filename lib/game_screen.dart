@@ -1,21 +1,17 @@
-// lib/game_screen.dart
-
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'audio_service.dart';
 import 'card_model.dart';
 import 'game_modes.dart';
 import 'game_theme.dart';
 import 'game_widgets.dart';
-import 'bottom_navigation.dart';
 import 'leaderboard_screen.dart';
 import 'leaderboard_service.dart';
 import 'player_score.dart';
-import 'profile_screen.dart';
+import 'profile_screen.dart' as profile_screen;
 import 'menu_screen.dart';
-import 'shop_screen.dart';
-import 'inventory_screen.dart';
 
 class GameScreen extends StatefulWidget {
   final GameConfig config;
@@ -26,53 +22,57 @@ class GameScreen extends StatefulWidget {
 }
 
 class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
-  // Game state variables
   int score = 0;
   int combo = 0;
   int hp = 0;
   int highScore = 0;
   bool hasShield = false;
   bool isPaused = false;
-  int _currentNavIndex = 0;
 
-  // Cấu hình cho từng chế độ game
-  final Map<GameMode, List<LevelConfig>> levelConfigs = {
+  int wrongFlipsCount = 0;
+
+  static final Map<GameMode, List<LevelConfig>> levelConfigs = {
     GameMode.classic: [
-      LevelConfig(pairs: 4, time: 120, gridSize: (2, 4)),   // Level 1: 2x4 (8 cards)
-      LevelConfig(pairs: 6, time: 150, gridSize: (2, 6)),   // Level 2: 2x6 (12 cards)
-      LevelConfig(pairs: 8, time: 180, gridSize: (2, 8)),   // Level 3: 2x8 (16 cards)
-      LevelConfig(pairs: 10, time: 210, gridSize: (2, 10)), // Level 4: 2x10 (20 cards)
-      LevelConfig(pairs: 12, time: 240, gridSize: (3, 8)),  // Level 5: 3x8 (24 cards)
+      LevelConfig(pairs: 4, time: 60, gridSize: (2, 4)),
+      LevelConfig(pairs: 6, time: 90, gridSize: (2, 6)),
+      LevelConfig(pairs: 8, time: 120, gridSize: (2, 8)),
+      LevelConfig(pairs: 10, time: 150, gridSize: (2, 10)),
+      LevelConfig(pairs: 12, time: 180, gridSize: (3, 8)),
     ],
     GameMode.timeAttack: [
-      LevelConfig(pairs: 4, time: 45, gridSize: (2, 4)),    // Level 1: 45s
-      LevelConfig(pairs: 6, time: 60, gridSize: (2, 6)),    // Level 2: 60s
-      LevelConfig(pairs: 8, time: 75, gridSize: (2, 8)),    // Level 3: 75s
-      LevelConfig(pairs: 10, time: 90, gridSize: (2, 10)),  // Level 4: 90s
-      LevelConfig(pairs: 12, time: 105, gridSize: (3, 8)),  // Level 5: 105s
+      LevelConfig(pairs: 4, time: 30, gridSize: (2, 4)),
+      LevelConfig(pairs: 6, time: 45, gridSize: (2, 6)),
+      LevelConfig(pairs: 8, time: 60, gridSize: (2, 8)),
+      LevelConfig(pairs: 10, time: 75, gridSize: (2, 10)),
+      LevelConfig(pairs: 12, time: 90, gridSize: (3, 8)),
     ],
     GameMode.survival: [
-      LevelConfig(pairs: 4, time: -1, gridSize: (2, 4), hp: 5),   // Level 1: 5 HP
-      LevelConfig(pairs: 6, time: -1, gridSize: (2, 6), hp: 5),   // Level 2: 5 HP
-      LevelConfig(pairs: 8, time: -1, gridSize: (2, 8), hp: 4),   // Level 3: 4 HP
-      LevelConfig(pairs: 10, time: -1, gridSize: (2, 10), hp: 4), // Level 4: 4 HP
-      LevelConfig(pairs: 12, time: -1, gridSize: (3, 8), hp: 3),  // Level 5: 3 HP
-    ],
-    GameMode.challenge: [
-      LevelConfig(pairs: 4, time: 90, gridSize: (2, 4), specialCards: 1),   // Level 1
-      LevelConfig(pairs: 6, time: 120, gridSize: (2, 6), specialCards: 2),  // Level 2
-      LevelConfig(pairs: 8, time: 150, gridSize: (2, 8), specialCards: 3),  // Level 3
-      LevelConfig(pairs: 10, time: 180, gridSize: (2, 10), specialCards: 4), // Level 4
-      LevelConfig(pairs: 12, time: 210, gridSize: (3, 8), specialCards: 5),  // Level 5
+      LevelConfig(pairs: 4, time: -1, gridSize: (2, 4), hp: 5),
+      LevelConfig(pairs: 6, time: -1, gridSize: (2, 6), hp: 5),
+      LevelConfig(pairs: 8, time: -1, gridSize: (2, 8), hp: 4),
+      LevelConfig(pairs: 10, time: -1, gridSize: (2, 10), hp: 4),
+      LevelConfig(pairs: 12, time: -1, gridSize: (3, 8), hp: 3),
     ],
   };
 
-  // Danh sách hình ảnh (đủ cho tất cả levels)
+  // Danh sách hình ảnh
   final List<String> allImages = [
-    'assets/hinh1.jpg', 'assets/hinh2.jpg', 'assets/hinh3.jpg', 'assets/hinh4.jpg',
-    'assets/hinh5.jpg', 'assets/hinh6.jpg', 'assets/hinh7.jpg', 'assets/hinh8.jpg',
-    'assets/hinh9.jpg', 'assets/hinh10.jpg', 'assets/hinh11.jpg', 'assets/hinh12.jpg',
-    'assets/hinh13.png', 'assets/hinh14.jpg', 'assets/hinh15.jpg', 'assets/hinh16.jpg',
+    'assets/img/hinh1.jpg',
+    'assets/img/hinh2.jpg',
+    'assets/img/hinh3.jpg',
+    'assets/img/hinh4.jpg',
+    'assets/img/hinh5.jpg',
+    'assets/img/hinh6.jpg',
+    'assets/img/hinh7.jpg',
+    'assets/img/hinh8.jpg',
+    'assets/img/hinh9.jpg',
+    'assets/img/hinh10.jpg',
+    'assets/img/hinh11.jpg',
+    'assets/img/hinh12.jpg',
+    'assets/img/hinh13.png',
+    'assets/img/hinh14.jpg',
+    'assets/img/hinh15.jpg',
+    'assets/img/hinh16.jpg',
   ];
 
   List<CardItem> cards = [];
@@ -89,11 +89,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   late AnimationController _shakeController;
   late AnimationController _fadeController;
-  late Animation<double> _fadeAnimation;
+  late AudioService _audioService;
 
   @override
   void initState() {
     super.initState();
+    _audioService = AudioService();
+    _initializeAudio();
     _initializeAnimations();
     _loadHighScore();
     _setupGame();
@@ -104,7 +106,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   LevelConfig _getCurrentLevelConfig() {
-    final configs = levelConfigs[widget.config.mode] ?? levelConfigs[GameMode.classic]!;
+    final configs =
+        levelConfigs[widget.config.mode] ?? levelConfigs[GameMode.classic]!;
     return configs[currentLevel.clamp(0, configs.length - 1)];
   }
 
@@ -136,20 +139,22 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
-
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
+  }
 
-    _fadeAnimation = Tween<double>(begin: 1.0, end: 0.3).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
-    );
+  Future<void> _initializeAudio() async {
+    await _audioService.initialize();
+    // Phát nhạc nền khi vào game
+    await _audioService.playBackgroundMusic('audio/game_background_music.mp3');
   }
 
   @override
   void dispose() {
     gameTimer?.cancel();
+    _audioService.stopBackgroundMusic();
     _shakeController.dispose();
     _fadeController.dispose();
     super.dispose();
@@ -177,7 +182,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
       });
 
-      // Start timer
       if (remainingTime > 0) {
         gameTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
           if (!mounted || isGameOver) {
@@ -191,7 +195,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
           if (remainingTime <= 0) {
             timer.cancel();
-            // Delay để đảm bảo UI đã update
+
             Future.delayed(const Duration(milliseconds: 100), () {
               if (mounted && !isGameOver) {
                 _gameOver(false);
@@ -211,7 +215,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         });
       }
 
-      // Generate cards
       final List<CardItem> newCards = [];
       final currentImages = allImages.take(levelConfig.pairs).toList();
 
@@ -220,43 +223,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         newCards.add(CardItem(iconIndex: i, imagePath: currentImages[i]));
       }
 
-      // Add special cards for challenge mode
-      if (widget.config.mode == GameMode.challenge && levelConfig.specialCards > 0) {
-        for (int i = 0; i < levelConfig.specialCards; i++) {
-          if (i == 0) {
-            newCards.add(CardItem(
-              iconIndex: -1,
-              imagePath: 'assets/bomb.png',
-              type: CardType.bomb,
-            ));
-          } else if (i == 1) {
-            newCards.add(CardItem(
-              iconIndex: -2,
-              imagePath: 'assets/ice.png',
-              type: CardType.ice,
-            ));
-          } else if (i == 2) {
-            newCards.add(CardItem(
-              iconIndex: -3,
-              imagePath: 'assets/bonus.png',
-              type: CardType.bonus,
-            ));
-          } else if (i == 3) {
-            newCards.add(CardItem(
-              iconIndex: -4,
-              imagePath: 'assets/shield.png',
-              type: CardType.shield,
-            ));
-          }
-        }
-      }
-
       newCards.shuffle();
 
       setState(() {
         cards = newCards;
       });
-
     } catch (e) {
       print('Error in _setupGame: $e');
     }
@@ -280,24 +251,48 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _saveScore() async {
-    if (widget.config.mode == GameMode.classic) return;
-
     final prefs = await SharedPreferences.getInstance();
     final playerName = prefs.getString('current_user') ?? 'Unknown';
 
-    final playerScore = PlayerScore(
-      playerName: playerName,
-      score: this.score,
-      moves: moves,
-      timeSpent: remainingTime > 0 ?
-      _getCurrentLevelConfig().time - remainingTime : elapsedTime,
-      playedAt: DateTime.now(),
-    );
+    final totalGames = (prefs.getInt('total_games_$playerName') ?? 0) + 1;
+    final totalWins = (prefs.getInt('wins_$playerName') ?? 0) + 1;
+    final playTime =
+        (prefs.getInt('play_time_$playerName') ?? 0) + (elapsedTime ~/ 60);
 
-    await LeaderboardService.saveScore(
-      widget.config.mode,
-      currentLevel + 1,
-      playerScore,
+    await prefs.setInt('total_games_$playerName', totalGames);
+    await prefs.setInt('wins_$playerName', totalWins);
+    await prefs.setInt('play_time_$playerName', playTime);
+
+    if (widget.config.mode != GameMode.classic) {
+      final playerScore = PlayerScore(
+        playerName: playerName,
+        score: this.score,
+        moves: moves,
+        timeSpent: remainingTime > 0
+            ? _getCurrentLevelConfig().time - remainingTime
+            : elapsedTime,
+        playedAt: DateTime.now(),
+      );
+
+      await LeaderboardService.saveScore(
+        widget.config.mode,
+        currentLevel + 1,
+        playerScore,
+      );
+    }
+
+    // Unlock achievements
+    bool isPerfect = wrongFlipsCount == 0;
+
+    // Call public function to unlock achievements
+    await profile_screen.unlockGameAchievements(
+      playerName: playerName,
+      isWin: true,
+      finalScore: score,
+      totalGames: totalGames,
+      totalWins: totalWins,
+      gameTime: elapsedTime,
+      isPerfectMatch: isPerfect,
     );
   }
 
@@ -322,10 +317,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  const Color(0xFF1a237e),
-                  const Color(0xFF0d47a1),
-                ],
+                colors: [const Color(0xFF1a237e), const Color(0xFF0d47a1)],
               ),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
@@ -350,10 +342,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     color: Colors.white.withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
-                  child: const Text(
-                    '🎉',
-                    style: TextStyle(fontSize: 48),
-                  ),
+                  child: const Text('🎉', style: TextStyle(fontSize: 48)),
                 ),
                 const SizedBox(height: 16),
 
@@ -476,8 +465,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                           Expanded(
                             child: OutlinedButton(
                               onPressed: () async {
-                                final prefs = await SharedPreferences.getInstance();
-                                final playerName = prefs.getString('current_user') ?? 'Unknown';
+                                final prefs =
+                                    await SharedPreferences.getInstance();
+                                final playerName =
+                                    prefs.getString('current_user') ??
+                                    'Unknown';
                                 if (!context.mounted) return;
 
                                 Navigator.of(context).push(
@@ -492,8 +484,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                               },
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: Colors.white,
-                                side: const BorderSide(color: Colors.white, width: 1),
-                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                side: const BorderSide(
+                                  color: Colors.white,
+                                  width: 1,
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -517,7 +514,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                             },
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.white,
-                              side: const BorderSide(color: Colors.white, width: 1),
+                              side: const BorderSide(
+                                color: Colors.white,
+                                width: 1,
+                              ),
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -561,10 +561,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         const SizedBox(height: 4),
         Text(
           label,
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.6),
-            fontSize: 11,
-          ),
+          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11),
         ),
         Text(
           value,
@@ -607,10 +604,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    const Color(0xFF1a237e),
-                    const Color(0xFF0d47a1),
-                  ],
+                  colors: [const Color(0xFF1a237e), const Color(0xFF0d47a1)],
                 ),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
@@ -635,15 +629,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       color: Colors.white.withOpacity(0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: const Text(
-                      '😢',
-                      style: TextStyle(fontSize: 48),
-                    ),
+                    child: const Text('😢', style: TextStyle(fontSize: 48)),
                   ),
                   const SizedBox(height: 16),
 
                   const Text(
-                    'Game Over',
+                    'Trò chơi kết thúc',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 24,
@@ -708,13 +699,21 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
-                            _buildStatItem(Icons.swap_horiz, 'Lần lật', '$moves'),
+                            _buildStatItem(
+                              Icons.swap_horiz,
+                              'Lần lật',
+                              '$moves',
+                            ),
                             Container(
                               width: 1,
                               height: 30,
                               color: Colors.white.withOpacity(0.3),
                             ),
-                            _buildStatItem(Icons.check_circle, 'Đã ghép', '$matchedPairs'),
+                            _buildStatItem(
+                              Icons.check_circle,
+                              'Đã ghép',
+                              '$matchedPairs',
+                            ),
                           ],
                         ),
                       ],
@@ -781,26 +780,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void _onCardTapped(CardItem card) {
     if (card.isFlipped || card.isMatched || isChecking || isGameOver) return;
 
-    // Handle special cards
-    if (widget.config.mode == GameMode.challenge) {
-      if (card.type == CardType.bomb) {
-        _handleBombCard(card);
-        return;
-      } else if (card.type == CardType.ice) {
-        _handleIceCard(card);
-        return;
-      } else if (card.type == CardType.bonus) {
-        _handleBonusCard(card);
-        return;
-      } else if (card.type == CardType.shield) {
-        _handleShieldCard(card);
-        return;
-      }
-    }
-
     setState(() {
       card.isFlipped = true;
     });
+
+    // Phát âm thanh lật thẻ
+    _audioService.playSoundEffect('audio/card_flip.mp3');
 
     if (firstFlippedCard == null) {
       firstFlippedCard = card;
@@ -808,56 +793,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       secondFlippedCard = card;
       _checkMatch();
     }
-  }
-
-  void _handleBombCard(CardItem card) {
-    setState(() {
-      card.isFlipped = true;
-      card.isMatched = true;
-      if (hasShield) {
-        hasShield = false;
-        score += 50; // Bonus for blocking bomb
-      } else {
-        score = (score - 200).clamp(0, 999999);
-        if (widget.config.mode == GameMode.survival) {
-          hp--;
-          if (hp <= 0) _gameOver(false);
-        }
-      }
-    });
-  }
-
-  void _handleIceCard(CardItem card) {
-    setState(() {
-      card.isFlipped = true;
-      card.isMatched = true;
-      isChecking = true;
-    });
-
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          isChecking = false;
-        });
-      }
-    });
-  }
-
-  void _handleBonusCard(CardItem card) {
-    setState(() {
-      card.isFlipped = true;
-      card.isMatched = true;
-      score += 300;
-    });
-    _updateHighScore();
-  }
-
-  void _handleShieldCard(CardItem card) {
-    setState(() {
-      card.isFlipped = true;
-      card.isMatched = true;
-      hasShield = true;
-    });
   }
 
   void _checkMatch() {
@@ -869,7 +804,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     });
 
     Timer(const Duration(milliseconds: 800), () {
-      bool isMatch = firstFlippedCard!.imagePath == secondFlippedCard!.imagePath;
+      bool isMatch =
+          firstFlippedCard!.imagePath == secondFlippedCard!.imagePath;
 
       setState(() {
         if (isMatch) {
@@ -877,10 +813,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           secondFlippedCard!.isMatched = true;
           matchedPairs++;
           _calculateScore(true);
+          // Phát âm thanh khi tìm thấy cặp
+          _audioService.playSoundEffect('audio/match_success.mp3');
         } else {
           firstFlippedCard!.isFlipped = false;
           secondFlippedCard!.isFlipped = false;
           _handleMismatch();
+          // Phát âm thanh khi không khớp
+          _audioService.playSoundEffect('audio/match_fail.mp3');
         }
 
         firstFlippedCard = null;
@@ -897,7 +837,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       combo++;
       int baseScore = 100;
       int comboBonus = combo > 1 ? (combo - 1) * 50 : 0;
-      int timeBonus = widget.config.mode == GameMode.timeAttack ? remainingTime * 2 : 0;
+      int timeBonus = widget.config.mode == GameMode.timeAttack
+          ? remainingTime * 2
+          : 0;
       int levelBonus = currentLevel * 50;
 
       setState(() {
@@ -911,6 +853,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   void _handleMismatch() {
+    wrongFlipsCount++;
     if (widget.config.mode == GameMode.survival) {
       hp--;
       if (hp <= 0) {
@@ -924,7 +867,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       return;
     }
 
-    // Count only normal card pairs (exclude special cards)
     final normalCards = cards.where((c) => c.type == CardType.normal).length;
     final totalPairs = normalCards ~/ 2;
 
@@ -947,7 +889,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     });
     _fadeController.reverse();
 
-    // Restart timer
     final levelConfig = _getCurrentLevelConfig();
     if (levelConfig.time > 0) {
       gameTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -971,29 +912,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  void _resetGame() {
-    setState(() {
-      score = 0;
-      combo = 0;
-      moves = 0;
-      matchedPairs = 0;
-      isGameOver = false;
-      isPaused = false;
-      elapsedTime = 0;
-      firstFlippedCard = null;
-      secondFlippedCard = null;
-      isChecking = false;
-      hasShield = false;
-
-      if (widget.config.mode == GameMode.survival) {
-        hp = _getCurrentLevelConfig().hp ?? 5;
-      }
-    });
-
-    _setupGame();
-    _fadeController.reset();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1002,43 +920,36 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         child: SafeArea(
           child: Stack(
             children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 80),
-                child: Column(
-                  children: [
-                    GameStatusBar(
-                      mode: widget.config.mode,
-                      timeRemaining: widget.config.mode == GameMode.classic
-                          ? elapsedTime
-                          : remainingTime,
-                      score: score,
-                      highScore: highScore,
-                      lives: hp,
-                      currentLevel: currentLevel + 1,
-                      totalLevels: _getTotalLevels(),
-                      progress: cards.isNotEmpty ? matchedPairs / (cards.where((c) => c.type == CardType.normal).length / 2) : 0,
-                      onPause: _pauseGame,
-                      hasShield: hasShield,
-                    ),
+              Column(
+                children: [
+                  GameStatusBar(
+                    mode: widget.config.mode,
+                    timeRemaining: widget.config.mode == GameMode.classic
+                        ? elapsedTime
+                        : remainingTime,
+                    score: score,
+                    highScore: highScore,
+                    lives: hp,
+                    currentLevel: currentLevel + 1,
+                    totalLevels: _getTotalLevels(),
+                    progress: cards.isNotEmpty
+                        ? matchedPairs /
+                              (cards
+                                      .where((c) => c.type == CardType.normal)
+                                      .length /
+                                  2)
+                        : 0,
+                    onPause: _pauseGame,
+                    hasShield: hasShield,
+                  ),
 
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: _buildGameGrid(),
-                      ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: _buildGameGrid(),
                     ),
-                  ],
-                ),
-              ),
-
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: GameBottomNavigation(
-                  currentIndex: _currentNavIndex,
-                  onTap: _onBottomNavTap,
-                ),
+                  ),
+                ],
               ),
 
               if (isPaused) _buildPauseOverlay(),
@@ -1049,49 +960,23 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  void _onBottomNavTap(int index) {
-    setState(() {
-      _currentNavIndex = index;
-    });
-
-    switch (index) {
-      case 0:
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const MenuScreen()),
-        );
-        break;
-      case 1:
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => LeaderboardScreen(
-              gameMode: widget.config.mode,
-              level: currentLevel + 1,
-              currentPlayer: 'Current Player',
-            ),
-          ),
-        );
-        break;
-      case 2:
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (context) => const ShopScreen()),
-        );
-        break;
-      case 3:
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (context) => const ProfileScreen()),
-        );
-        break;
-      case 4:
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (context) => const InventoryScreen()),
-        );
-        break;
+  double _calculateCardScaleFactor(int totalCards) {
+    if (totalCards <= 4) {
+      return 1.2; // Rất lớn cho 4 thẻ
+    } else if (totalCards <= 6) {
+      return 1.0; // Kích thước bình thường cho 6 thẻ
+    } else if (totalCards <= 8) {
+      return 0.95; // Nhỏ hơn một chút cho 8 thẻ
+    } else if (totalCards <= 10) {
+      return 0.90; // Nhỏ hơn cho 10 thẻ
+    } else if (totalCards <= 12) {
+      return 0.85; // Nhỏ hơn nữa cho 12 thẻ
+    } else {
+      return 0.75; // Rất nhỏ cho 16+ thẻ
     }
   }
 
-  // Calculate optimal grid dimensions based on total cards
   (int rows, int cols) _calculateGridSize(int totalCards) {
-    // Common card count layouts
     final Map<int, (int, int)> commonLayouts = {
       4: (2, 2),
       6: (2, 3),
@@ -1107,7 +992,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       return commonLayouts[totalCards]!;
     }
 
-    // Auto-fit for non-standard counts
     final cols = sqrt(totalCards).ceil();
     final rows = (totalCards / cols).ceil();
     return (rows, cols);
@@ -1132,7 +1016,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         final maxWidth = constraints.maxWidth;
         final maxHeight = constraints.maxHeight;
 
-        // Calculate card dimensions
         final cardWidth = (maxWidth - (cols - 1) * spacing) / cols;
         final cardHeight = (maxHeight - (rows - 1) * spacing) / rows;
         final cardSize = cardWidth < cardHeight ? cardWidth : cardHeight;
@@ -1141,6 +1024,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         final needsScroll = cardSize < minCardSize;
         final effectiveCardSize = needsScroll ? minCardSize : cardSize;
 
+        // **NEW: Calculate scale factor based on card count**
+        final scaleFactor = _calculateCardScaleFactor(totalCards);
+        final scaledCardSize = effectiveCardSize * scaleFactor;
+
         return Center(
           child: GridView.builder(
             shrinkWrap: !needsScroll,
@@ -1148,25 +1035,37 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 ? const BouncingScrollPhysics()
                 : const NeverScrollableScrollPhysics(),
             padding: EdgeInsets.symmetric(
-              horizontal: needsScroll ? 0 : (maxWidth - cols * effectiveCardSize - (cols - 1) * spacing) / 2,
-              vertical: needsScroll ? 0 : (maxHeight - rows * effectiveCardSize - (rows - 1) * spacing) / 2,
+              // **UPDATED: Use scaledCardSize for centered positioning**
+              horizontal: needsScroll
+                  ? 0
+                  : (maxWidth - cols * scaledCardSize - (cols - 1) * spacing) /
+                        2,
+              vertical: needsScroll
+                  ? 0
+                  : (maxHeight - rows * scaledCardSize - (rows - 1) * spacing) /
+                        2,
             ),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: cols,
               crossAxisSpacing: spacing,
               mainAxisSpacing: spacing,
-              childAspectRatio: 1.0, // Keep cards square
+              childAspectRatio: 1.0,
             ),
             itemCount: cards.length,
             itemBuilder: (context, index) {
               final card = cards[index];
-              return GameCard(
-                imageAsset: card.imagePath,
-                isFlipped: card.isFlipped,
-                isMatched: card.isMatched,
-                isEnabled: !isChecking && !isPaused && !isGameOver,
-                onTap: () => _onCardTapped(card),
-                cardType: card.type,
+
+              // **NEW: Return card with scaled size**
+              return Transform.scale(
+                scale: scaleFactor,
+                child: GameCard(
+                  imageAsset: card.imagePath,
+                  isFlipped: card.isFlipped,
+                  isMatched: card.isMatched,
+                  isEnabled: !isChecking && !isPaused && !isGameOver,
+                  onTap: () => _onCardTapped(card),
+                  cardType: card.type,
+                ),
               );
             },
           ),
@@ -1188,16 +1087,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFF1a237e),
-                const Color(0xFF0d47a1),
-              ],
+              colors: [const Color(0xFF1a237e), const Color(0xFF0d47a1)],
             ),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.3),
-              width: 2,
-            ),
+            border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
             boxShadow: [
               BoxShadow(
                 color: GameThemeData.primaryColor.withOpacity(0.3),
@@ -1226,7 +1119,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               const SizedBox(height: 16),
 
               const Text(
-                'Game Paused',
+                'Trò chơi tạm dừng',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 24,
@@ -1286,10 +1179,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   ),
                   child: const Text(
                     'Tiếp tục',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -1314,7 +1204,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 }
 
-// Level configuration class
 class LevelConfig {
   final int pairs;
   final int time;
